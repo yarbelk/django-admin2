@@ -26,6 +26,7 @@ from django.db.models import get_models
 from django.utils import six
 
 from . import utils
+from django.utils.encoding import python_2_unicode_compatible, force_text
 
 
 logger = logging.getLogger('djadmin2')
@@ -81,10 +82,16 @@ def model_permission(permission):
         assert model_class, (
             'Cannot apply model permissions on a view that does not '
             'have a `.model` or `.queryset` property.')
-
+        
+        try:
+            # django 1.8+
+            model_name = model_class._meta.model_name
+        except AttributeError:
+            model_name = model_class._meta.module_name
+            
         permission_name = permission.format(
             app_label=model_class._meta.app_label,
-            model_name=model_class._meta.module_name)
+            model_name=model_name)
         return request.user.has_perm(permission_name, obj)
     return has_permission
 
@@ -185,6 +192,7 @@ class ModelDeletePermission(BasePermission):
     permissions = (model_permission('{app_label}.delete_{model_name}'),)
 
 
+@python_2_unicode_compatible
 class TemplatePermissionChecker(object):
     '''
     Can be used in the template like:
@@ -342,6 +350,12 @@ class TemplatePermissionChecker(object):
     def __nonzero__(self):
         # if no view is bound we will return false, since we don't know which
         # permission to check we stay save in disallowing the access
+        return self._cast_bool()
+
+    def __bool__(self):
+        return self._cast_bool()
+
+    def _cast_bool(self):
         if self._view is None:
             return False
         if self._obj is None:
@@ -349,10 +363,11 @@ class TemplatePermissionChecker(object):
         else:
             return self._view.has_permission(self._obj)
 
-    def __unicode__(self):
+
+    def __str__(self):
         if self._view is None:
             return ''
-        return unicode(bool(self))
+        return force_text(bool(self))
 
 
 def create_view_permissions(app, created_models, verbosity, **kwargs):

@@ -41,7 +41,7 @@ class BaseListAction(AdminModel2Mixin, TemplateView):
         options = utils.model_options(self.model)
 
         self.app_label = options.app_label
-        self.model_name = options.module_name
+        self.model_name = options.model_name
 
         self.item_count = len(queryset)
 
@@ -49,7 +49,7 @@ class BaseListAction(AdminModel2Mixin, TemplateView):
             objects_name = options.verbose_name
         else:
             objects_name = options.verbose_name_plural
-        self.objects_name = unicode(objects_name)
+        self.objects_name = force_text(objects_name)
 
         super(BaseListAction, self).__init__(*args, **kwargs)
 

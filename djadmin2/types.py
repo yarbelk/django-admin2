@@ -4,6 +4,7 @@ from __future__ import division, absolute_import, unicode_literals
 from collections import namedtuple
 import logging
 import os
+import sys
 
 from django.core.urlresolvers import reverse
 from django.conf.urls import patterns, url
@@ -27,15 +28,15 @@ class ModelAdminBase2(type):
     def __new__(cls, name, bases, attrs):
         new_class = super(ModelAdminBase2, cls).__new__(cls, name,
                                                         bases, attrs)
-        view_list = getattr(new_class, 'views', [])
-
+        view_list = []
         for key, value in attrs.items():
             if isinstance(value, views.AdminView):
                 if not value.name:
                     value.name = key
                 view_list.append(value)
 
-        setattr(new_class, 'views', view_list)
+        view_list.extend(getattr(new_class, 'views', []))
+        new_class.views = view_list
         return new_class
 
 
@@ -187,7 +188,7 @@ class ModelAdmin2(with_metaclass(ModelAdminBase2)):
         form_class = (self.update_form_class if
                       self.update_form_class else self.form_class)
         if form_class is None:
-            form_class = modelform_factory(self.model)
+            form_class = modelform_factory(self.model, fields='__all__')
         kwargs.update({
             'inlines': self.inlines,
             'form_class': form_class,
@@ -210,16 +211,29 @@ class ModelAdmin2(with_metaclass(ModelAdminBase2)):
 
     def get_urls(self):
         pattern_list = []
-        for view in self.views:
-            view.model_admin = self
-            get_kwargs = getattr(self, "get_%s_kwargs" % view.name, None)
+        for admin_view in self.views:
+            admin_view.model_admin = self
+            get_kwargs = getattr(self, "get_%s_kwargs" % admin_view.name, None)
             if not get_kwargs:
-                get_kwargs = view.get_view_kwargs
+                get_kwargs = admin_view.get_view_kwargs
+            try:
+                view_instance = admin_view.view.as_view(**get_kwargs())
+            except Exception as e:
+                trace = sys.exc_info()[2]
+                new_exception = TypeError(
+                    'Cannot instantiate admin view "{}.{}". '
+                    'The error that got raised was: {}'.format(
+                        self.__class__.__name__, admin_view.name, e))
+                try:
+                    raise new_exception.with_traceback(trace)
+                except AttributeError:
+                    raise (new_exception, None, trace)
+
             pattern_list.append(
                 url(
-                    regex=view.url,
-                    view=view.view.as_view(**get_kwargs()),
-                    name=self.get_prefixed_view_name(view.name)
+                    regex=admin_view.url,
+                    view=view_instance,
+                    name=self.get_prefixed_view_name(admin_view.name)
                 )
             )
         return patterns('', *pattern_list)

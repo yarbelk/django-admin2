@@ -12,6 +12,8 @@ django-admin2
    :target: https://crate.io/packages/django-admin2/
 .. image:: https://pypip.in/d/django-admin2/badge.png
    :target: https://crate.io/packages/django-admin2/
+.. image:: https://badges.gitter.im/Join Chat.svg
+   :target: https://gitter.im/pydanny/django-admin2?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 
 One of the most useful parts of ``django.contrib.admin`` is the ability to
 configure various views that touch and alter data. django-admin2 is a complete
@@ -46,7 +48,7 @@ Screenshots
 Requirements
 =============
 
-* Django 1.5+
+* Django 1.6+
 * Python 2.7+ or Python 3.3+
 * django-braces_
 * django-extra-views_
@@ -85,6 +87,14 @@ Add djadmin2 and rest_framework to your settings file:
         'crispy_forms', # Required for the default theme's layout
         ...
     )
+    
+Add the default theme in your settings file:
+
+.. code-block:: python
+
+    # In settings.py
+    INSTALLED_APPS += ('djadmin2.themes.djadmin2theme_default',)
+    ADMIN2_THEME_DIRECTORY = "djadmin2theme_default/"
 
 Add djadmin2 urls to your URLconf:
 
@@ -130,6 +140,17 @@ How to write django-admin2 modules
   djadmin2.default.register(Comment)
   djadmin2.default.register(User, UserAdmin2)
 
+Migrating from 0.5.x
+====================
+
+Themes are now defined explicitly, including the default theme. Therefore, your `settings` need to include this:
+
+.. code-block:: python
+
+    # In settings.py
+    INSTALLED_APPS += ('djadmin2.themes.djadmin2theme_default',)
+    ADMIN2_THEME_DIRECTORY = "djadmin2theme_default/"
+
 
 Drop-In Themes
 ===============
@@ -150,6 +171,19 @@ If you create a new theme, you define it thus:
     # Mythical theme! This does not exit... YET!
     INSTALLED_APPS += ('djadmin2theme_foundation',)
     ADMIN2_THEME_DIRECTORY = "djadmin2theme_foundation/"
+    
+Follows Best Practices
+======================
+
+.. image:: http://twoscoops.smugmug.com/Two-Scoops-Press-Media-Kit/i-C8s5jkn/0/O/favicon-152.png
+   :name: Two Scoops Logo
+   :align: center
+   :alt: Two Scoops of Django
+   :target: http://twoscoopspress.org/products/two-scoops-of-django-1-6
+
+This project follows best practices as espoused in `Two Scoops of Django: Best Practices for Django 1.6`_.
+
+.. _`Two Scoops of Django: Best Practices for Django 1.6`: http://twoscoopspress.org/products/two-scoops-of-django-1-6
 
 
 Support this project!

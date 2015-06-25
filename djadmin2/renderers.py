@@ -10,6 +10,7 @@ from datetime import date, time, datetime
 
 from django.db import models
 from django.utils import formats, timezone
+from django.utils.encoding import force_text
 from django.template.loader import render_to_string
 
 from djadmin2 import settings
@@ -45,11 +46,12 @@ def datetime_renderer(value, field):
 
     """
     if isinstance(value, datetime):
+        # django ticket #23466 Removing seconds from locale formats
         return formats.localize(timezone.template_localtime(value))
     elif isinstance(value, (date, time)):
-        return formats.localize(value)
+        return ":".join((formats.localize(value)).split(":")[:2])
     else:
-        return value
+        return ":".join(value.split(":")[:2])
 
 
 def title_renderer(value, field):
@@ -60,10 +62,10 @@ def title_renderer(value, field):
     :type value: str or unicode
     :param field: The model field instance
     :type field: django.db.models.fields.Field
-    :rtype: unicode
+    :rtype: unicode or str
 
     """
-    return unicode(value).title()
+    return force_text(value).title()
 
 
 def number_renderer(value, field):

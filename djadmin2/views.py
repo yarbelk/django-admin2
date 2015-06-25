@@ -2,16 +2,18 @@
 from __future__ import division, absolute_import, unicode_literals
 
 import operator
+from functools import reduce
+
 from datetime import datetime
 
-from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.contrib.auth.forms import (PasswordChangeForm,
                                        AdminPasswordChangeForm)
 from django.contrib.auth.views import (logout as auth_logout,
                                        login as auth_login)
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse, reverse_lazy
-from django.db import models
+from django.db import models, router
 from django.db.models.fields import FieldDoesNotExist
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
@@ -19,16 +21,14 @@ from django.utils.encoding import force_text
 from django.utils.text import capfirst
 from django.utils.translation import ugettext_lazy
 from django.views import generic
-
 import extra_views
 
 
 from . import permissions, utils
 from .forms import AdminAuthenticationForm
-from .models import LogEntry
 from .viewmixins import Admin2Mixin, AdminModel2Mixin, Admin2ModelFormMixin
 from .filters import build_list_filter, build_date_filter
-
+from .models import LogEntry
 
 class AdminView(object):
 
@@ -52,6 +52,10 @@ class IndexView(Admin2Mixin, generic.TemplateView):
     :apps: A dictionary of apps, each app being a dictionary with keys
            being models and the value being djadmin2.types.ModelAdmin2
            objects.
+    :app_verbose_names: A dictionary containing the app verbose names,
+                        each item has a key being the `app_label` and
+                        the value being a string, (or even a lazy
+                        translation object), with the custom app name.
     """
     default_template_name = "index.html"
     registry = None
@@ -68,6 +72,18 @@ class IndexView(Admin2Mixin, generic.TemplateView):
 
 
 class AppIndexView(Admin2Mixin, generic.TemplateView):
+    """Context Variables
+
+    :app_label: Name of your app
+    :registry: A dictionary of registered models for a given app, each
+               item has a key being the model and the value being
+               djadmin2.types.ModelAdmin2 objects.
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
+    """
     default_template_name = "app_index.html"
     registry = None
     apps = None
@@ -92,6 +108,11 @@ class ModelListView(AdminModel2Mixin, generic.ListView):
     :model: Type of object you are editing
     :model_name: Name of the object you are editing
     :app_label: Name of your app
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
     """
     default_template_name = "model_list.html"
     permission_classes = (
@@ -271,14 +292,14 @@ class ModelListView(AdminModel2Mixin, generic.ListView):
         return context
 
     def _format_years(self, context):
-        years = context['object_list'].dates('published_date', 'year')
+        years = self._qs_date_or_datetime(context['object_list'], 'year')
         if len(years) == 1:
             return self._format_months(context)
         else:
             return [
                 (("?year=%s" % year.strftime("%Y")), year.strftime("%Y"))
                 for year in
-                context['object_list'].dates('published_date', 'year')
+                self._qs_date_or_datetime(context['object_list'], 'year')
             ]
 
     def _format_months(self, context):
@@ -289,7 +310,7 @@ class ModelListView(AdminModel2Mixin, generic.ListView):
                 ),
                 date.strftime("%B %Y")
             ) for date in
-            context["object_list"].dates('published_date', 'month')
+            self._qs_date_or_datetime(context['object_list'], 'month')
         ]
 
     def _format_days(self, context):
@@ -302,8 +323,15 @@ class ModelListView(AdminModel2Mixin, generic.ListView):
                 ),
                 date.strftime("%B %d")
             ) for date in
-            context["object_list"].dates('published_date', 'day')
+            self._qs_date_or_datetime(context['object_list'], 'day')
         ]
+
+    def _qs_date_or_datetime(self, object_list, type):
+        if isinstance(self.model._meta.get_field(self.model_admin.date_hierarchy), models.DateTimeField):
+            qs = object_list.datetimes(self.model_admin.date_hierarchy, type)
+        else:
+            qs = object_list.dates(self.model_admin.date_hierarchy, type)
+        return qs
 
     def get_success_url(self):
         view_name = 'admin2:{}_{}_index'.format(
@@ -323,6 +351,11 @@ class ModelDetailView(AdminModel2Mixin, generic.DetailView):
     :model: Type of object you are editing
     :model_name: Name of the object you are editing
     :app_label: Name of your app
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
     """
     default_template_name = "model_detail.html"
     permission_classes = (
@@ -337,6 +370,11 @@ class ModelEditFormView(AdminModel2Mixin, Admin2ModelFormMixin,
     :model: Type of object you are editing
     :model_name: Name of the object you are editing
     :app_label: Name of your app
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
     """
     form_class = None
     default_template_name = "model_update_form.html"
@@ -368,6 +406,11 @@ class ModelAddFormView(AdminModel2Mixin, Admin2ModelFormMixin,
     :model: Type of object you are editing
     :model_name: Name of the object you are editing
     :app_label: Name of your app
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
     """
     form_class = None
     default_template_name = "model_update_form.html"
@@ -399,6 +442,11 @@ class ModelDeleteView(AdminModel2Mixin, generic.DeleteView):
     :model_name: Name of the object you are editing
     :app_label: Name of your app
     :deletable_objects: Objects to delete
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
     """
     success_url = "../../"  # TODO - fix this!
     default_template_name = "model_confirm_delete.html"
@@ -413,8 +461,9 @@ class ModelDeleteView(AdminModel2Mixin, generic.DeleteView):
             opts = utils.model_options(obj)
             return '%s: %s' % (force_text(capfirst(opts.verbose_name)),
                                force_text(obj))
-
-        collector = utils.NestedObjects(using=None)
+                               
+        using = router.db_for_write(self.get_object()._meta.model)
+        collector = utils.NestedObjects(using=using)
         collector.collect([self.get_object()])
         context.update({
             'deletable_objects': collector.nested(_format_callback)
@@ -431,6 +480,17 @@ class ModelDeleteView(AdminModel2Mixin, generic.DeleteView):
 
 
 class ModelHistoryView(AdminModel2Mixin, generic.ListView):
+    """Context Variables
+
+    :model: Type of object you are editing
+    :model_name: Name of the object you are editing
+    :app_label: Name of your app
+    :app_verbose_names: A dictionary containing the app verbose name for
+                        a given app, the item has a key being the
+                        `app_label` and the value being a string, (or
+                        even a lazy translation object), with the custom
+                        app name.
+    """
     default_template_name = "model_history.html"
     permission_classes = (
         permissions.IsStaffPermission,
@@ -459,7 +519,7 @@ class PasswordChangeView(Admin2Mixin, generic.UpdateView):
     default_template_name = 'auth/password_change_form.html'
     form_class = AdminPasswordChangeForm
     admin_form_class = PasswordChangeForm
-    model = get_user_model()
+    model = settings.AUTH_USER_MODEL
     success_url = reverse_lazy('admin2:password_change_done')
 
     def get_form_kwargs(self, **kwargs):
@@ -477,6 +537,9 @@ class PasswordChangeView(Admin2Mixin, generic.UpdateView):
             return self.admin_form_class
         return super(PasswordChangeView, self).get_form_class()
 
+    def get_queryset(self):
+        from django.contrib.auth import get_user_model
+        return get_user_model()._default_manager.all()
 
 class PasswordChangeDoneView(Admin2Mixin, generic.TemplateView):
 
